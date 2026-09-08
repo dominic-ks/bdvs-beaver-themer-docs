@@ -1,313 +1,186 @@
 # Archives
 
-
 * * *
 
 ## Summary
 
-Archives follow a different pattern than many other elements in this system of working, as we start here with a Toolset Archive and allow the Toolset system to handle all of the archive queries as well as search / pagination as necessary.
+An "archive" here means any page that lists multiple posts of one type: the native
+WordPress posts/CPT archive, a taxonomy archive, or a page that's designed to *look* like
+a listing even though it isn't a real WP archive URL (e.g. an events page). There are
+three approaches below. **Methods 1 and 2 (component/view-based) are the preferred
+direction for new work** — pick between them based on whether the listing needs to be a
+real WP archive URL or not. Reach for Method 3 (legacy Toolset Archive) only when
+maintaining/extending a site that already uses it.
 
-Aside from this, WordPress Archives should be built in much the same way as a Toolset View.
+Verified against real sites (2026-09): `homestart-sftp` (`post-archive` component,
+targeting the real `archive:post` + `taxonomy:category` locations) and
+`the-briny-new-sftp` (`event-rows` / `event-slider` components, on an ordinary Page).
+`fortava-sftp` is the reference for the legacy Toolset method.
 
-## Setting the Archive Slug
+## Method 1 (preferred): Beaver Themer layout + a `view/` component
 
-By default WordPress will use the post type as the URL slug for a post type archive but often these are not attractive or user / front end friendly. To edit this, simply edit the post type under Toolset > Post Types.
+Use this for a **real WordPress archive** — a post type's own archive URL, or a taxonomy
+archive — where WordPress's native query, rewrite rules, and pagination should keep
+working exactly as they otherwise would.
 
-![](https://bedeviouswebdevelopment.atlassian.net/wiki/download/attachments/676364289/image-20210318-172840.png?version=1&modificationDate=1616088523088&cacheVersion=1&api=v2)
+1. Create a Beaver Themer layout (`fl-theme-layout` post type) and set its **Theme
+   Builder → Locations** to target the archive(s) it should render on, e.g.
+   `archive:post` for the main posts archive, `archive:<cpt-slug>` for a CPT archive,
+   `taxonomy:<taxonomy-slug>` for a taxonomy archive. A layout can target more than one
+   location at once (homestart's `Post Archive` layout targets both `archive:post` and
+   `taxonomy:category`).
+2. Build the layout in Beaver Builder as normal. It's fine — and common — to stack more
+   than one row: an intro/hero row built from ordinary modules or another component
+   (homestart's layout has a `slider-type-1` row before the loop), followed by a row
+   containing the loop component.
+3. For the loop itself, create (or reuse) a **`view/` component** (see root `CLAUDE.md`
+   component architecture). Its `view.php` should be exactly:
+   ```php
+   <?php
+   global $wp_query;
 
-**NB.** that this step only applies to CPTs and not for WordPress Posts. The posts slug should be set by creating a page with the required title and slug and then setting this page as the blog page under _Settings > Reading > Posts Page_.
+   $query = $wp_query;
+   ```
+   This hands the component the real main query WordPress already built for that
+   archive/taxonomy request — so search, pagination, and any query-string filtering the
+   theme adds all keep working with zero extra code in the component. (Confirmed example:
+   `homestart-sftp/components/view/post-archive/`.)
+4. `template.php` loops `$query` exactly like any other `view/` component — see
+   "Building the loop markup" below.
+5. Place the component on the layout via the usual `bdvs-content-template` module
+   (`select_template` = the component's folder name).
 
-## Archive Headers and Footers
+### Setting the archive slug
 
-Often it is required that an archive page contains some sort of introduction content, e.g. a hero image & title that matches or is similar to the format of the home page or other pages. In these instances the approach, for both content after the header of before the footer:
+For a CPT, edit the post type under **Toolset → Post Types** to set a friendlier archive
+slug than the default post-type name. This step doesn't apply to WordPress Posts — see
+"Posts archive" below.
 
-* Create a new Beaver Themer “Part”
-* Assign the part to appear after the header and only on the archive pages that it is required
-* In these instances, until a better approach is identified, it is acceptable to enter a page title and other content directly in the Beaver Builder, as it’s not easy to control Archive Titles, for example
+### Don't build a separate Toolset Archive/View for this
 
-### Example Archive Anatomy
+Once a Beaver Themer layout is targeting the archive location, there's no need for a
+parallel Toolset Archive or View doing the same query — that's the legacy method
+(Method 2) and the two shouldn't be combined for the same listing.
 
-![](https://bedeviouswebdevelopment.atlassian.net/wiki/download/attachments/676364289/New%20Wireframe%201.png?version=1&modificationDate=1616089439267&cacheVersion=1&api=v2)
+## Method 2 (preferred, for non-archive listings): a Page + a `view/` component with its own query
 
-## Theme-Based Archive Components
+Use this when the listing **doesn't need to be a real WP archive URL** — no native
+pagination or archive rewrite semantics required, just "show these posts of type X in
+this layout." This is the right fit for a small, fixed-ish set (an events page, a
+locations page) built as an ordinary Page.
 
-While archives primarily use Toolset's built-in functionality, you can create theme-based components for archive headers, footers, and custom archive layouts.
+This is the same pattern the existing Toolset guidance already establishes for the Posts
+archive (see below) — a real Page carries the content, rather than fighting WordPress's
+own archive slug/rewrite handling — generalised here to any post type via a component
+instead of Toolset's native View/Archive editor.
 
-### Archive Header Component
+It also covers a single-item teaser, not just a listing — e.g. "show the most recent
+Case Study" as one card on the home page (`posts_per_page => 1`). Before building the CPT
+for a case like this, don't assume it needs a single template just because it's a
+"content" CPT — see the note under
+[Custom Post Types](../General/Toolset.md#custom-post-types) — and see
+[Single Templates: prefer WordPress's native fields](Single%20Templates.md#prefer-wordpresss-native-fields-before-creating-custom-ones)
+for how that decision changes whether the teaser uses full content vs excerpt, and
+whether its CTA needs its own link field at all.
 
-Create a reusable archive header component for consistent styling across different archive pages:
+1. Create the Page normally (title + slug you want the listing to live at).
+2. Create a `view/` component whose `view.php` builds its own `WP_Query`, e.g.
+   (`the-briny-new-sftp/components/view/event-rows/view.php`):
+   ```php
+   <?php
+   $post_type = 'event';
+   $posts_per_page = -1;
 
-#### Component Structure:
-```
-components/
-└── view-template/
-    └── archive-header/
-        ├── template.html
-        ├── style.css
-        └── script.js (optional)
-```
+   $args = array(
+     'post_type'      => $post_type,
+     'posts_per_page' => $posts_per_page,
+     'post_status'    => 'publish',
+     'orderby'        => 'menu_order',
+     'order'          => 'ASC',
+   );
 
-#### template.html:
+   $query = new WP_Query($args);
+   ```
+   Using `posts_per_page => -1` with `orderby => menu_order` is typical here since the
+   point is usually "show everything, admin-ordered" rather than paginate — if the CPT
+   needs manual ordering in the admin, enable **hierarchical** on the post type (see
+   `General/Toolset.md`) so the Simple Page Ordering drag-and-drop is available.
+3. Drop the component onto the Page via Beaver Builder as normal — it's just another
+   `bdvs-content-template` module, no Themer layout involved at all.
+4. It's fine to have more than one component reading the same post type for different
+   presentations on the same page (briny's `What's On` page combines `event-slider` for a
+   top summary carousel with `event-rows` for the full stacked listing below it — both
+   query `event` independently via their own `view.php`).
+
+### Posts archive (WordPress Posts, not a CPT)
+
+WordPress always uses the post-type slug for a CPT archive, but for standard Posts the
+slug is controlled differently: create a Page with the desired title/slug and set it as
+the blog page under **Settings → Reading → Posts Page**. Either archive method above
+still applies for the *content* of that page — Method 1 (a Themer layout targeting
+`archive:post`, as in homestart's `Post Archive` layout) is preferred since a Posts Page
+is still a real WP archive query under the hood.
+
+## Building the loop markup (`template.php`)
+
+Whichever method supplies `$query`, `template.php` loops it the same way as any other
+`view/` component — standard WP loop functions inside `BDVS LOOP START`/`END` markers:
+
 ```html
-<!-- wpv-attribute name="archive-title" label="Archive Title" type="text" -->
-<!-- wpv-attribute name="archive-description" label="Archive Description" type="editor" -->
-<!-- wpv-attribute name="background-image" label="Background Image URL" type="url" -->
-<!-- wpv-attribute name="show-breadcrumbs" label="Show Breadcrumbs" type="checkbox" -->
+<div class="tb-event-rows-container">
 
-<div class="archive-header" style="background-image: url('{{background-image}}');">
-  <div class="archive-header-overlay">
-    <div class="container">
-  <!-- Optional breadcrumbs -->
-  <nav class="breadcrumbs mb-3">
-        <a href="[wpv-bloginfo show='url']">Home</a>
-        <span class="separator"> / </span>
-        <span class="current">{{archive-title}}</span>
-      </nav>
-      
-      <h1 class="archive-title">{{archive-title}}</h1>
-      <div class="archive-description">{{archive-description}}</div>
-    </div>
+  <!-- BDVS LOOP START -->
+
+  <div class="tb-event-row" id="<?php echo esc_attr(get_post_field('post_name', get_the_ID())); ?>">
+    <h2><?php the_title(); ?></h2>
+    <div><?php echo apply_filters('the_content', get_the_content()); ?></div>
   </div>
+
+  <!-- BDVS LOOP END -->
+
 </div>
 ```
 
-#### style.css:
-```css
-.archive-header {
-  position: relative;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  min-height: 300px;
-  display: flex;
-  align-items: center;
-}
+A few things worth carrying over from the real examples:
 
-.archive-header-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
+- Use `get_the_ID()` / `get_post_field()` / `get_post_meta()` rather than template-tag
+  shortcuts that assume the global post is already set up correctly for a non-standard
+  query.
+- If the loop needs to vary styling by position (alternating row background/direction,
+  say), key off `$query->current_post` inside the loop rather than hardcoding per-item
+  markup.
+- If another component on the same page needs to link into a specific loop item (e.g. a
+  slider's "Read more" button jumping to the matching row further down the page), give
+  each loop item an anchor derived from the post slug (`id="<?php echo esc_attr(get_post_field('post_name', get_the_ID())); ?>"`)
+  and link to `#<slug>` from the other component.
 
-.archive-header .container {
-  position: relative;
-  z-index: 2;
-  color: white;
-  text-align: center;
-}
+## Archive headers/footers that aren't part of the loop layout itself
 
-.archive-title {
-  font-size: 3rem;
-  margin-bottom: 1rem;
-  font-weight: 700;
-}
+If an archive needs intro content that doesn't belong inside the loop component (a
+one-off hero image/title that isn't itself a listing), the older approach of a separate
+Beaver Themer "Part" assigned to appear after the header, scoped to just that archive,
+is still valid and simpler than building it into the loop layout — see `fortava-sftp`'s
+`Post Archive Hero` / `Job Vacancy Archive Hero` layouts. It's acceptable to hand-enter
+that content directly in Beaver Builder rather than pull it from a field, since archive
+titles/intros aren't easy to source generically.
 
-.archive-description {
-  font-size: 1.25rem;
-  max-width: 600px;
-  margin: 0 auto;
-}
+## Method 3 (legacy): native Toolset Archive
 
-.breadcrumbs a {
-  color: rgba(255, 255, 255, 0.8);
-  text-decoration: none;
-}
+Older projects (`fortava-sftp` and earlier) use Toolset's own Archive editor rather than
+a component: a Toolset Archive owns the query, loop markup, search, and pagination
+directly, with a separate Beaver Themer "Part" (as above) supplying any hero/intro
+content before it. This still works and there's no need to migrate an existing site's
+working archive to Method 1 just for its own sake — but don't build new archives this
+way; use Method 1 (or Method 2 above, for a non-archive listing page) instead.
 
-.breadcrumbs a:hover {
-  color: white;
-}
+If maintaining a legacy Toolset Archive:
 
-.breadcrumbs .separator {
-  color: rgba(255, 255, 255, 0.6);
-  margin: 0 5px;
-}
-
-.breadcrumbs .current {
-  color: white;
-}
-
-@media (max-width: 768px) {
-  .archive-header {
-    min-height: 200px;
-  }
-  
-  .archive-title {
-    font-size: 2rem;
-  }
-  
-  .archive-description {
-    font-size: 1rem;
-  }
-}
-```
-
-### Archive Card Component
-
-Create a component for individual archive items with consistent styling:
-
-#### Component Structure:
-```
-components/
-└── view/
-    └── archive-card/
-        ├── template.html
-        ├── style.css
-        └── script.js (optional)
-```
-
-#### template.html:
-```html
-<!-- wpv-attribute name="show-excerpt" label="Show Excerpt" type="checkbox" -->
-<!-- wpv-attribute name="show-date" label="Show Date" type="checkbox" -->
-<!-- wpv-attribute name="show-author" label="Show Author" type="checkbox" -->
-<!-- wpv-attribute name="card-style" label="Card Style (minimal, detailed, featured)" type="text" -->
-
-<article class="archive-card archive-card-{{card-style}}">
-  <div class="card-image">
-    [wpv-post-featured-image size="medium"]
-  </div>
-  
-  <div class="card-content">
-    <h3 class="card-title">
-      <a href="[wpv-post-url]">[wpv-post-title]</a>
-    </h3>
-    
-  <!-- Optional excerpt -->
-    <div class="card-excerpt">
-      [wpv-post-excerpt]
-    </div>
-    
-    <div class="card-meta">
-  <!-- Optional date -->
-      <span class="card-date">[wpv-post-date]</span>
-      
-  <!-- Optional author -->
-      <span class="card-author">by [wpv-post-author]</span>
-    </div>
-    
-    <a href="[wpv-post-url]" class="card-link">Read More</a>
-  </div>
-</article>
-```
-
-#### style.css:
-```css
-.archive-card {
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-  margin-bottom: 2rem;
-}
-
-.archive-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-}
-
-.card-image img {
-  width: 100%;
-  height: 200px;
-  object-fit: cover;
-}
-
-.card-content {
-  padding: 1.5rem;
-}
-
-.card-title {
-  margin-bottom: 1rem;
-}
-
-.card-title a {
-  color: #333;
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.card-title a:hover {
-  color: #007cba;
-}
-
-.card-excerpt {
-  color: #666;
-  margin-bottom: 1rem;
-  line-height: 1.6;
-}
-
-.card-meta {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  font-size: 0.9rem;
-  color: #888;
-}
-
-.card-link {
-  display: inline-block;
-  background: #007cba;
-  color: white;
-  padding: 0.5rem 1rem;
-  text-decoration: none;
-  border-radius: 4px;
-  transition: background 0.3s ease;
-}
-
-.card-link:hover {
-  background: #005a87;
-  color: white;
-}
-
-/* Card style variations */
-.archive-card-minimal .card-image {
-  display: none;
-}
-
-.archive-card-minimal .card-content {
-  padding: 1rem;
-}
-
-.archive-card-featured {
-  border-left: 4px solid #007cba;
-}
-
-.archive-card-featured .card-title {
-  font-size: 1.5rem;
-}
-
-.archive-card-detailed .card-content {
-  padding: 2rem;
-}
-
-@media (max-width: 768px) {
-  .archive-card {
-    margin-bottom: 1rem;
-  }
-  
-  .card-content {
-    padding: 1rem;
-  }
-  
-  .card-meta {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-}
-```
-
-### Benefits of Theme-Based Archive Components
-
-1. **Consistency**: Maintain consistent archive styling across different post types
-2. **Flexibility**: Easy to customize archive layouts without editing code
-3. **Reusability**: Create archive headers and cards that work across multiple archives
-4. **Performance**: Optimized CSS and JavaScript loading
-5. **Maintenance**: Centralized styling and structure management
+* The query/pagination/search behaviour is Toolset's, not something to hand-roll.
+* Avoid hardcoding values into the Archive's Content Template — use custom fields or the
+  Toolset Views shortcodes instead (see `General/Toolset.md`).
+* A Content Template *can* use Beaver Builder internally here (Archives are one of the
+  few places this is possible, since Beaver Builder can't nest inside Beaver Builder) —
+  but a component under `components/view/` is the more maintainable, reusable
+  alternative going forward.
 
 ---

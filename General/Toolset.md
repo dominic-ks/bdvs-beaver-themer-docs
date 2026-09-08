@@ -23,9 +23,10 @@ You can create Custom Post Types with Toolset under _Toolset > Post Types_. Some
 * The Toolset CPT editor lets you choose the Classic Editor for the post type, this is often useful if you are adding custom fields as the UI is nicer and if you are using [Beaver Builder](/wiki/spaces/BDWD/pages/610992129/Beaver+Builder) or a [Beaver Themer](/wiki/spaces/BDWD/pages/611287049/Beaver+Themer) Template then there is no need for the Block Editor.
 * As a general rule, don’t edit the labels
 * Only enable capabilities in the _Sections to display when editing_ section that are specifically needed, i.e. don’t just add the editor unless there is a body of content to be added to the CPT
-* If the CPT is for managing data and will not have an archive or public facing page disable these options (e.g. testimonials), if it will have a public facing page (e.g. case studies), enable them:
+* If the CPT is for managing data and will not have an archive or public facing single page disable these options (e.g. testimonials), if it will have a public facing single page (e.g. case studies), enable them:
     * Rewrite
     * Allow permalinks to be prepended with front base
+    * **Don't infer "will have a single page" from the CPT's name or content type alone** — a case study, event, or similar CPT is just as often used purely as a data source for a teaser/listing elsewhere (e.g. "most recent case study" on the home page) with no single template ever built. Confirm with the actual site plan (existing pages, what's linked from "read more"-style buttons today) before enabling these.
     * Pages
     * has_archive
 * If the CPT will need to be sorted in an arbitrary order, be sure to enable the _hierarchical_ option as this will enable the drag and drop sorter in the admin area using the [Simple Page Ordering plugin](Tools%20&%20Plugins.md#supporting--commonly-used-plugins)
@@ -83,4 +84,8 @@ You shouldn’t use a view to display a WordPress Archive, use the method descri
 
 ## Archives
 
-Archives are much like Views but are designed to display the output from the WordPress Loop / Main Query and so we should use the method described in these docs for [Archives](/wiki/spaces/BDWD/pages/676364289/Archives) to make the most of this functionality.
+Archives display the output from the WordPress Loop / Main Query. Native Toolset
+Archives are a legacy approach here — see [Archives](../Elements/Archives.md) for the
+preferred method (a Beaver Themer layout targeting the archive/taxonomy location, with
+the loop rendered by a `view/` component) and when the legacy Toolset method is still
+appropriate.
