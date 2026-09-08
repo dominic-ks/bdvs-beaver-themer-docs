@@ -21,18 +21,44 @@ The general setup:
    consistently-followed convention — confirmed on `the-briny-new-sftp` (`Event Fields`
    group → `event` CPT, fields stored as `wpcf-event-*` post meta).
 3. **Beaver Themer**: create an `fl-theme-layout` layout, and under
-   **Theme Builder → Locations** target the post type
-   (e.g. `singular:<cpt-slug>` for all posts of that type, or a specific post if it's a
-   one-off template).
+   **Theme Builder → Locations** target the post type (all posts of that type, or a
+   specific post if it's a one-off template).
 4. **Beaver Builder**: build the layout as normal, pulling in the post's own fields (see
    below) rather than typing content in directly (typing directly is fine for one-off
    pages, but a single template runs across every post of that type, so its content
    must come from the post being rendered).
 
-## Two ways to pull field data into the layout
+### The two meta keys that actually drive this (correcting the UI's own naming)
 
-Both are used, side by side — pick per-field based on whether a native BB module already
-does the job, or the value needs to be embedded inside custom component markup.
+Confirmed against a real, rendering layout (`homestart-sftp`'s `Single Project`, ID 893,
+`post:project`) versus a from-scratch attempt on `connected-by-fusion-sftp` that matched
+the CPT (visible as a `fl-theme-builder-` body class fragment) but rendered no content
+until this was fixed:
+
+- `_fl_theme_builder_locations` (serialized array of strings) — despite the admin UI
+  calling this "Locations" with entries that read like `singular:<cpt-slug>`, the value
+  actually stored is **`post:<cpt-slug>`** (e.g. `post:project`, `post:service`), not
+  `singular:<cpt-slug>`. Header/footer layouts use a different vocabulary entirely
+  (`general:site`); archive layouts use `archive:<post-type>` / `taxonomy:<taxonomy>`.
+- `_fl_theme_layout_type` (a plain string: `singular`, `header`, `footer`, `archive`,
+  etc.) — a **separate** meta key that also has to be set. Without it, Beaver Themer
+  still matches the location internally (the post-type fragment of the
+  `fl-theme-builder-*` body class renders) but never actually injects the layout's
+  content into the page — the giveaway is a body class like `fl-theme-builder-` /
+  `fl-theme-builder--<layout-slug>` (empty type segment) instead of the expected
+  `fl-theme-builder-singular fl-theme-builder-singular-<layout-slug>`.
+
+Both keys need to be present and correct; missing either one produces a state that looks
+plausible (post type matched, no PHP errors) but silently renders nothing. When converting
+an existing published page into a layout via direct postmeta edits (see the root
+`CLAUDE.md`'s "Editing BB Pages Directly via Post Meta" section) rather than building one
+fresh through the Beaver Themer admin UI, both of these have to be added by hand — they
+don't get created automatically just by changing the post's `post_type`.
+
+## Three ways to pull field data into the layout
+
+Pick per-field based on the module involved and whether the connect UI can express the
+value on its own.
 
 ### 1. A native BB module, connected via Beaver Themer
 
@@ -44,13 +70,36 @@ typing static content into it. This is the more common case for simple fields �
 on `homestart-sftp`'s `Single Project` layout, where the body copy and two images are
 plain `rich-text`/`photo` modules connected this way, with no custom component involved.
 
-### 2. A `bdvs-content-template` component, using Types/Views shortcodes directly in markup
+### 2. A `bdvs-content-template` component field, connected the same way (preferred over shortcodes)
 
-When the layout needs bespoke markup around several fields together (a card-style header
-combining title + two custom fields + a CTA button, say), build a normal
-`view-template/` component and pull field values with real shortcodes written directly
-into `template.html` — these run against the actual post being rendered, they are not
-placeholders:
+**Prefer this over option 3 whenever a field just needs one dynamic value** (a title, a
+featured image, an excerpt) — including fields inside a `bdvs-content-template` component,
+which is easy to miss since those modules look like one big custom settings blob rather
+than a set of ordinary BB fields. The `bdvs-content-template` module (see
+`bdvs-beaver-themer/inc/modules/bdvs-content-template/bdvs-content-template.php`,
+`get_connection_types()`) registers every `string`/`url`/`color`/`photo`/`custom_field`
+attribute as a connectable field, so the same connect-icon UI from option 1 works directly
+on a component's own attributes (a hero's Title field, its Background Image field, etc.) —
+no template edits needed. Confirmed live on `homestart-sftp`'s `Single Project` layout
+(`components/view-template/hero`-style slide fields): the connection is stored per field as
+a JSON string in the module's `settings.connections` array, e.g.
+`'hsp-slide-title' => '{"object":"post","property":"title","field":"text","settings":null}'`
+(other `property` values seen: `featured_image_url`, `excerpt`, `custom_field` with a
+`settings.key` of the target `wpcf-*` meta key) — the field's own literal value is left
+alone as an editor-preview placeholder; the connection is what drives the live render.
+Applied on `connected-by-fusion-sftp`'s `service` CPT single template (converted from the
+old Services page), where the `hero` component's `cbf-hero-title` field is connected to
+Post Title this way rather than typing `[wpv-post-title]` into the field.
+
+### 3. A `bdvs-content-template` component, using Types/Views shortcodes directly in markup
+
+Fall back to this only when the connect UI genuinely can't express the value — real PHP
+logic, a loop, a taxonomy pull, or several fields combined into one piece of markup that
+isn't just "this field equals that post property". When the layout needs bespoke markup
+around several fields together (a card-style header combining title + two custom fields +
+a CTA button, say), build a normal `view-template/` component and pull field values with
+real shortcodes written directly into `template.html` — these run against the actual post
+being rendered, they are not placeholders:
 
 - `[types field="field-slug"][/types]` — a Toolset Types custom field (the CPT's own
   fields from its `<CPT> Fields` group)
