@@ -43,7 +43,54 @@ You can create Custom Post Types with Toolset under _Toolset > Post Types_. Some
 
 ## Custom Post Type Relationships
 
-- [ ] Add some info on relationships
+Toolset's modern relationships (the "m2m" engine — `toolset_is_m2m_enabled` option) store
+relationships in three custom DB tables, not an option: `{prefix}toolset_relationships`
+(one row per relationship), `{prefix}toolset_type_sets` (maps each relationship side's
+`set_id` to a post-type slug — **every relationship side gets its own fresh `set_id` row,
+even when the same post type is reused across multiple relationships**), and
+`{prefix}toolset_associations` (the actual parent↔child links between real posts).
+Confirmed by reading a real, working relationship on `fortava-sftp`
+(`team-member-care-home`, a genuine many-to-many) before building a first one elsewhere —
+mirror an existing relationship's row the same way other Toolset registrations in this
+repo are mirrored, rather than guessing the ~15 columns blind.
+
+**Building one via SSH + wp-cli** (confirmed end-to-end on `connected-by-fusion-sftp`,
+`case-study` ↔ `service`): insert two `toolset_type_sets` rows (one per side, fresh
+`set_id`s), then one `toolset_relationships` row referencing those `set_id`s as
+`parent_types`/`child_types`. For an ordinary many-to-many: `cardinality_parent_max` /
+`cardinality_child_max` = `-1`, `ownership` = `0`, `is_distinct` = `1`, `origin` =
+`'wizard'`, `role_name_*`/`role_label_*` blank, `needs_legacy_support` = `0`,
+`is_active` = `1`, `autodelete_intermediary` = `1`.
+
+**Reading a relationship's related posts** (front end, in a component or a custom
+shortcode): `toolset_get_related_posts( $post_id, '<relationship-slug>', 'child' )` (or
+`'parent'`) — this is the same PHP API whether it's a genuine content relationship
+("Services Used" on a Case Study) or the repeating-field-group construct below, since a
+repeating group's items are really just related child posts.
+
+### Repeating field groups are relationships in disguise
+
+A Toolset "repeating field group" (the `+ Add` repeater UI on a CPT's edit screen,
+letting an editor add any number of value-sets like stat tiles or FAQ items) is **not** a
+special field type — it's a hidden, non-public CPT (registered in `wpcf-custom-types`
+with `is_repeating_field_group => true`, `public => false`, `show_ui => false`, supports
+`post_title`/`author`/`custom-fields` only) whose instances are related to the real
+parent post via a **fixed one-to-many relationship**: `cardinality_parent_max = 1`
+(each repeat item belongs to exactly one parent), `cardinality_child_max = -1`,
+`origin = 'repeatable_group'`, `role_name_parent/child/intermediary` =
+`'parent'`/`'child'`/`'association'`, `role_label_*` = `'Parent'`/`'Child'`/`'Parents'`/
+`'Children'`, `is_distinct = 0`. Confirmed against `fortava-sftp`'s `home-facilities`
+repeating group. The group's own sub-fields are ordinary `wpcf-fields` entries
+(`meta_type => 'postmeta'` on the hidden CPT's own posts), and its `wp-types-group` field
+group post uses `types_field_group_purpose => 'for_repeating_field_group'` and
+`_types_repeatable_field_group_post_type => '<hidden-cpt-slug>'` instead of the normal
+`_wp_types_group_post_types` key.
+
+Rendering a repeating group's items in a component: rather than guessing Types' own
+front-end repeater shortcode syntax, use the same `toolset_get_related_posts()` API as any
+other relationship, then read each child post's fields with plain `get_post_meta()` —
+confirmed working on `connected-by-fusion-sftp`'s Case Study "Results Stats" (see
+`cbf_case_study_result_stats()` in `functions.php`).
 
 ## Custom Fields
 
