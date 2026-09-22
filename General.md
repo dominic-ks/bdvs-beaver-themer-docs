@@ -8,6 +8,7 @@
 ### Development Guides  
 - [Beaver Builder](General/Beaver%20Builder.md) - Page builder integration
 - [Beaver Themer](General/Beaver%20Themer.md) - Theme builder functionality
+- [Global Rows & Modules](General/Global%20Rows%20%26%20Modules.md) - Syncing shared content across pages, incl. via SSH/wp-cli
 - [General Development Flow](General/General%20Development%20Flow.md) - Development workflow
 - [Tools & Plugins](General/Tools%20&%20Plugins.md) - Required tools and plugins
 - [Toolset](General/Toolset.md) - Toolset plugin integration
