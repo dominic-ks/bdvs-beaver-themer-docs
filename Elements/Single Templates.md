@@ -28,6 +28,10 @@ The general setup:
    pages, but a single template runs across every post of that type, so its content
    must come from the post being rendered).
 
+If the *sections themselves* vary from post to post (not just their content), see
+[Flexible Layouts](Flexible%20Layouts.md): a repeating group of typed sections rendered
+by one module in the template.
+
 ### The two meta keys that actually drive this (correcting the UI's own naming)
 
 Confirmed against a real, rendering layout (`homestart-sftp`'s `Single Project`, ID 893,

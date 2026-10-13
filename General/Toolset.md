@@ -86,11 +86,51 @@ group post uses `types_field_group_purpose => 'for_repeating_field_group'` and
 `_types_repeatable_field_group_post_type => '<hidden-cpt-slug>'` instead of the normal
 `_wp_types_group_post_types` key.
 
+**Wiring that's easy to miss when building one by hand** (confirmed against Creative
+Clique's working `feature-sections` group and Types 3.6.3's own lookup code, which finds
+a group's items by the field group post's own slug):
+
+- The field group post's `post_name`, the hidden CPT slug, and the relationship `slug`
+  must all be **the same string** (e.g. `feature-sections` / `feature-sections` /
+  `feature-sections`).
+- The field group post's `post_status` is `hidden`, not `publish`.
+- The parent's own field group lists the repeating group as a pseudo-field
+  `_repeatable_group_<rfg field group post ID>` in its `_wp_types_group_fields` (e.g.
+  `,client-logo,...,_repeatable_group_2841,`). This is what puts the repeater on the
+  parent's edit screen.
+- Each item post carries `toolset-post-sortorder` meta (1, 2, 3…), which holds the
+  editor's drag-and-drop order.
+
+`connected-by-fusion-sftp`'s Case Study "Results Stats" group (`result-stat`) was built
+before this was known and gets all three slug/status/listing points wrong (group slug
+`result-stat-fields`, status `publish`, relationship `case-study-result-stat`, not listed
+in the Case Study Fields group). That's probably why `toolset_get_related_posts()`
+returns nothing for it, and why `cbf_get_related_post_ids()` in that theme's
+`functions.php` reads the association tables directly instead. **That helper has a
+bug:** `toolset_associations.parent_id`/`child_id` hold
+`toolset_connected_elements.group_id`, not that table's `id`. The helper joins on `id`,
+which only works while the two numbers happen to be equal. They stop matching once rows
+are deleted, as confirmed on CBF in October 2026. Use `toolset_get_related_posts()` on a
+correctly wired group instead of reading the tables. If you must read them, join through
+`group_id`.
+
+Two more hand-registration traps:
+- `toolset_type_sets.type` is `varchar(20)`. A longer slug makes the insert fail
+  silently, and the relationship then "doesn't exist" to the API.
+- WordPress caps post type names at 20 characters anyway, so keep repeating group slugs
+  within that.
+
+Repeating groups can be **nested** (a repeating group inside a repeating group's own
+field group, listed there by the same `_repeatable_group_<id>` pseudo-field); the
+nested group's relationship simply has the outer group's CPT as its parent type. See
+[Flexible Layouts](../Elements/Flexible%20Layouts.md).
+
 Rendering a repeating group's items in a component: rather than guessing Types' own
-front-end repeater shortcode syntax, use the same `toolset_get_related_posts()` API as any
-other relationship, then read each child post's fields with plain `get_post_meta()` —
-confirmed working on `connected-by-fusion-sftp`'s Case Study "Results Stats" (see
-`cbf_case_study_result_stats()` in `functions.php`).
+front-end repeater shortcode syntax, look up the item post IDs through the relationship,
+sort them by `toolset-post-sortorder`, then read each item's fields with plain
+`get_post_meta()`. On `connected-by-fusion-sftp` that's `cbf_get_rfg_item_ids()` in
+`functions.php`, used by the Service sections. The older `cbf_case_study_result_stats()`
+uses the unsorted `cbf_get_related_post_ids()` directly.
 
 ## Custom Fields
 
