@@ -68,9 +68,12 @@ select:
 
 - **Types that repeat items of their own** (a features grid, a slider's slides) use a
   **nested repeating group** inside the section group, rather than a fixed number of
-  slots. Its relationship has the section CPT as the parent type. Conditional display
-  isn't set on the nested group itself (it's unverified whether Types supports that), so
-  its label says which type it's for, e.g. "Features (Features / Benefits sections only)".
+  slots. Its relationship has the section CPT as the parent type. Types (checked on
+  3.6.3) has **no conditional display for a repeating group**, only for fields inside one
+  and for whole post field groups. So label the nested group with the type it's for, e.g.
+  "Features (Features / Benefits sections only)", and, if editors need it hidden, use the
+  small admin script described under
+  [Hiding nested groups by section type](#hiding-nested-groups-by-section-type).
 - **Keep repeating group slugs to 20 characters or fewer.** Each one is a real post
   type, and WordPress rejects longer post type names. Registration appears to succeed,
   but inserting an item fails with "Could not insert post into the database". On CBF,
@@ -129,6 +132,106 @@ Gotchas when mapping fields onto component attributes:
   started rendering. Call the renderer from a `view/` component's `template.php`, not from
   arbitrary hooks.
 
+## Fields shared across section types
+
+When most types need the same kinds of content (a heading, some text, an image, a
+button), give them **shared fields** instead of a set per type: one
+`<group>-heading`, one `<group>-text`, and so on. The field's conditional display lists
+every type that uses it, with `relation: OR`, and its label says what it's for in each
+type (e.g. "Text (Problem, Motivation: body; Testimonial: quote)"). On CBF's SEO
+sections this kept 13 section types down to 11 fields. Only add a type-specific field
+where the content genuinely means something different.
+
+Note that Types (3.4.11+) **clears a conditionally hidden field's value when the post is
+saved**. Changing a section's type and saving loses the fields the new type doesn't use.
+
+## Hiding nested groups by section type
+
+Because Types can't conditionally show a nested repeating group, CBF uses a small admin
+script (`js/admin.js`, enqueued only on the CPT's edit screen by
+`cbf_admin_enqueue_scripts()`):
+
+- PHP builds a map of nested group **slug → (type field slug, types that use it)**, turns
+  the slugs into group post IDs, and passes it to the script with
+  `wp_localize_script()`.
+- The script finds each nested list's control (`.c-rgx__nested--control`), reads the
+  parent item through Types' knockout model (`ko.dataFor( el )`, which gives
+  `repeatableGroup.id` and `item.id`), and reads that item's type select, named
+  `types-repeatable-group[<item ID>][<type field slug>]`.
+- It hides the list's title and toggle when the type doesn't use it. An open list is
+  closed through Types first (`repeatableGroup.toggleGroupVisibility()`), so Types' own
+  count of open lists stays right.
+- It re-runs on type change, and on a `MutationObserver` over `#poststuff`, because Types
+  draws and adds items after page load.
+
+The horizontal view (a per-user Types option) only lets the script hide the cell's
+control, not the whole column.
+
+## More than one template on the same CPT
+
+A CPT can have a second flexible layout, e.g. a new design that each post is moved to
+when its new content is ready, without touching the posts still on the old one. CBF's
+Service CPT has **Standard** and **SEO** templates this way.
+
+- **A Page Template select** on the CPT (`service-page-template`: `standard` / `seo`).
+  Empty means the original template. Pin existing posts to the original value
+  explicitly: if the select's default is the new template, an existing post with no
+  saved value would switch the next time it's saved.
+- **A separate repeating group per template** (`service-section` and `seo-section`), not
+  new types in the old one, so a post's new sections can be written and previewed while
+  its live page still shows the old template.
+- **One field group per template, with a group-level condition** on the select (Types
+  group conditional display, e.g. *SEO Page* shown when `service-page-template = seo`).
+  Types evaluates group conditions live in the editor, so changing the select swaps the
+  groups without saving. A hidden group's values and repeating group items are kept. A
+  repeating group sits in whichever field group holds it, so the original template's
+  group had to move out of the shared *Service Fields* group into its own group to be
+  hidden.
+- **Two published Themer layouts** for the same location (`post:<cpt>`), and a filter on
+  `fl_theme_builder_current_page_layouts` that removes the one not wanted for the
+  current post. Find the layouts by slug, not ID. **Deploy the filter before publishing
+  the second layout**, or every post briefly matches both. Deleting the second layout on
+  its own puts every post back on the original.
+- **Preview:** CBF's filter honours `?cbf-template=seo|standard` for users who can edit
+  the post, and ignores it for everyone else.
+
+## Pre-filling new posts
+
+New posts can start with a full set of sections, filled with placeholder content, for
+editors to rewrite, reorder or delete:
+
+- Hook `wp_insert_post` for a **new** post of the CPT (`$update` false). This fires when
+  "Add New" opens, so the sections are there on the first edit screen.
+- Create each item as a post of the section type, set `toolset-post-sortorder`, and link it
+  with `toolset_connect_posts( '<group slug>', $parent_id, $item_id )`. Nested items are
+  linked the same way to their section.
+- Make the seeder **skip posts that already have sections**, so it never overwrites and
+  can be run again safely, e.g. once over existing posts with `wp eval`.
+- `toolset_get_related_posts()` **finds nothing under an auto-draft parent**, though
+  Types' own repeater loader (`Types_Field_Group_Repeatable_Mapper_Legacy`, which the edit
+  screen uses) does. The edit screen still shows the seeded items. It's just that code
+  checking "already seeded?" through the relationship API won't see them until the post is
+  saved.
+- Placeholder images and files: upload one of each to the Media Library once, store the
+  IDs in an option, and reuse them.
+
+## Clean up items when a post is deleted
+
+Types **leaves repeating group items behind** when their parent post is deleted. With
+seeding, every abandoned "Add New" leaves a full set of orphans when WordPress cleans up
+auto-drafts after a week. Hook `before_delete_post`, find the post's items with Types'
+loader (`do_action( 'toolset_do_m2m_full_init' )` first, so it works from cron too), and
+delete nested items, then sections. See `cbf_delete_seo_sections()`.
+
+## A `view/` component as a section
+
+A section can also be an existing `view/` component (CBF's Case Study section reuses
+`view/case-study`). `cbf_render_view_component( $slug, $context_post_id )` does what the
+module would: it sets the parent post as the current post, includes `view.php` for
+`$query`, enqueues the component's assets, outputs `template.php` with the part between the
+BDVS LOOP markers repeated per post, then restores the outer post. It returns `''` when
+the query is empty, so the section can be left out instead of showing "No items found".
+
 ## Section wrapper, background and spacing
 
 Because all sections render from **one** module, BB's own row settings can't give each
@@ -167,3 +270,16 @@ padding between them: `:has(+ …)` on the first, `+` on the second.
 | Loop component | `components/view/service-sections/` |
 | Renderer + field mapping | `cbf_get_rfg_item_ids()`, `cbf_render_component()`, `cbf_render_service_section()` in `functions.php` |
 | Themer layout | `Service Single` (ID 11): hero row → sections row → case study row → CTA row |
+
+Second template on the same CPT (SEO):
+
+| Piece | Where |
+|-------|-------|
+| Template switch | `service-page-template` select; `cbf_filter_service_layouts()` on `fl_theme_builder_current_page_layouts` |
+| Repeating groups | `seo-section` → nested `seo-logo`, `seo-item`, `seo-review`, `seo-faq`; shared `seo-section-*` fields |
+| Section types | `client-logos`, `image-content-row`, `feature-benefits`, `cta-banner`, `review-cards`, `testimonial-quote`, `case-study` (view), `guide-download`, `location-map`, `article-cards`, `faq-accordion` |
+| Loop component | `components/view/seo-sections/` |
+| Renderer | `cbf_render_seo_section()`, `cbf_render_view_component()` |
+| Seeding and clean-up | `cbf_seed_seo_sections()` (via `cbf_seed_new_service()` on `wp_insert_post`), `cbf_delete_seo_sections()` |
+| Editor | field groups *SEO Page* and *Standard Page* with group conditions; `js/admin.js` for nested groups |
+| Themer layout | `Service Single (SEO)` (slug `service-single-seo`): hero view → sections row → services navigation |
