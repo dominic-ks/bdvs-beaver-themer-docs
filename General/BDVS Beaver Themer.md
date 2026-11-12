@@ -158,6 +158,8 @@ A breakdown of the `wpv-attribute` shortcode atts:
 * `multiple` - set to `true` in order to allow multiple
 * `form` - a pseudo-json array detailing the fields for the form. Note that each field contains `name`, `label` and `type` and can in theory support any values that any other field can, except that a form cannot contain another form. Each field object is separated with a pipe - | - character.
 
+**Put a text field first.** In the Beaver Builder settings form, each item in the list is titled with the value of the form's *first* field. If that field is a `photo`, the items show as bare attachment IDs (e.g. `68`, `66`, `67`), which makes them impossible to tell apart. Always make the first field a short text field that names the item (a title, caption, name or label), and put photos after it. The order only affects the editor: saved items are stored by field name, so reordering the fields of an existing form does not change content already entered.
+
 The `wpv-attribute` shortcode itself is passed to the `elements` attribute of the `bdvs_bt_form_repeater` shortcode. The contents of which will be printed to the screen once for each instance of the form.
 
 Within the template you will notice two parameters enclosed in Angular style `{{ }}` brackets. When the template is rendered these tags will be replaced with the values assigned to the fields with those keys.
